@@ -1,7 +1,6 @@
 package io.blodhgarm.anvil_player_heads;
 
 import com.google.common.collect.Lists;
-import com.mojang.authlib.Agent;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.ProfileLookupCallback;
 import net.fabricmc.api.ModInitializer;
@@ -13,11 +12,9 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.StringHelper;
 import net.minecraft.util.Uuids;
 import net.minecraft.util.collection.DefaultedList;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.Optional;
-import java.util.UUID;
 
 public class AnvilPlayerHeads implements ModInitializer {
 
@@ -69,7 +66,7 @@ public class AnvilPlayerHeads implements ModInitializer {
                         }
 
                         @Override
-                        public void onProfileLookupFailed(GameProfile profile, Exception exception) {}
+                        public void onProfileLookupFailed(String profileName, Exception exception) {}
                     };
 
                     lookupProfile(server, Lists.newArrayList(name), profileLookupCallback);
@@ -88,7 +85,7 @@ public class AnvilPlayerHeads implements ModInitializer {
         var names = players.stream().filter(playerName -> !StringHelper.isEmpty(playerName)).toArray(String[]::new);
 
         if (server.isOnlineMode()) {
-            server.getGameProfileRepo().findProfilesByNames(names, Agent.MINECRAFT, callback);
+            server.getGameProfileRepo().findProfilesByNames(names, callback);
         }  else {
             for (var name : names) {
                 callback.onProfileLookupSucceeded(new GameProfile(Uuids.getOfflinePlayerUuid(name), name));
