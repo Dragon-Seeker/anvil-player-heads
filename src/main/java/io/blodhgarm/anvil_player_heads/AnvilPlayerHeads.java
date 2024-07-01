@@ -4,6 +4,8 @@ import com.google.common.collect.Lists;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.ProfileLookupCallback;
 import net.fabricmc.api.ModInitializer;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.ProfileComponent;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Items;
 import net.minecraft.screen.slot.Slot;
@@ -28,25 +30,20 @@ public class AnvilPlayerHeads implements ModInitializer {
         if (left.getItem() != Items.PLAYER_HEAD || !slots.get(1).getStack().isEmpty() || !(player instanceof ServerPlayerEntity serverPlayer)) return false;
 
         var output = left.copy();
-        var nbt = output.getOrCreateNbt();
 
-        if (getGameProfile(serverPlayer.server, playerName).isPresent()) {
-            nbt.putString("SkullOwner", playerName);
+        var profile = getGameProfile(serverPlayer.server, playerName);
 
-            output.setNbt(nbt);
+        var bl = profile.isPresent();
 
-            slots.get(2).setStack(output);
-
-            return true;
+        if (bl) {
+            output.set(DataComponentTypes.PROFILE, new ProfileComponent(profile.get()));
         } else {
-            nbt.remove("SkullOwner");
-
-            output.setNbt(nbt);
-
-            slots.get(2).setStack(output);
-
-            return false;
+            output.remove(DataComponentTypes.PROFILE);
         }
+
+        slots.get(2).setStack(output);
+
+        return bl;
     }
 
     private static Optional<GameProfile> getGameProfile(MinecraftServer server, String name) {
