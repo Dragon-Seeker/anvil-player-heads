@@ -1,23 +1,21 @@
 package io.blodhgarm.anvil_player_heads;
 
-import com.google.common.collect.Lists;
-import com.mojang.authlib.Agent;
 import com.mojang.authlib.GameProfile;
-import com.mojang.authlib.ProfileLookupCallback;
+import io.blodhgarm.anvil_player_heads.mixin.AnvilScreenHandlerAccessor;
 import net.fabricmc.api.ModInitializer;
+import net.minecraft.block.entity.SkullBlockEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Items;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtHelper;
+import net.minecraft.screen.AnvilScreenHandler;
 import net.minecraft.screen.slot.Slot;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.util.StringHelper;
-import net.minecraft.util.Uuids;
 import net.minecraft.util.collection.DefaultedList;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class AnvilPlayerHeads implements ModInitializer {
 
@@ -25,74 +23,62 @@ public class AnvilPlayerHeads implements ModInitializer {
 
     public void onInitialize() {}
 
-    public static boolean handleHeadRename(PlayerEntity player, DefaultedList<Slot> slots, String playerName) {
+    private static final Map<Integer, String> ENTITY_ID_TO_LOOKUP_NAME = new ConcurrentHashMap<>();
+
+    public static boolean canHandleRenaming(PlayerEntity player, DefaultedList<Slot> slots, final String playerName) {
         var left = slots.get(0).getStack();
 
-        if (left.getItem() != Items.PLAYER_HEAD || !slots.get(1).getStack().isEmpty() || !(player instanceof ServerPlayerEntity serverPlayer)) return false;
+        if (left.getItem() != Items.PLAYER_HEAD || !slots.get(1).getStack().isEmpty() || !(player instanceof final ServerPlayerEntity serverPlayer) || playerName.isEmpty()) return false;
+
+        final var playerId = player.getId();
+
+        ENTITY_ID_TO_LOOKUP_NAME.put(playerId, playerName);
+
+        var startingProfile = new GameProfile(null, playerName);
+
+        SkullBlockEntity.loadProperties(startingProfile, possibleProfile -> {
+            if(possibleProfile == startingProfile || !possibleProfile.isComplete()) possibleProfile = null;
+
+            var gameProfile = Optional.ofNullable(possibleProfile);
+
+            if(!ENTITY_ID_TO_LOOKUP_NAME.containsKey(playerId) || !ENTITY_ID_TO_LOOKUP_NAME.get(playerId).equals(playerName)) return;
+
+            serverPlayer.server.executeSync(() -> {
+                var handler = serverPlayer.currentScreenHandler;
+
+                if(handler instanceof AnvilScreenHandler anvilHandler && runScreenUpdate(anvilHandler, gameProfile)) {
+                    anvilHandler.updateResult();
+                }
+            });
+        });
+
+        return true;
+    }
+
+    private static boolean runScreenUpdate(AnvilScreenHandler anvilScreenHandler, Optional<GameProfile> profile) {
+        var slots = anvilScreenHandler.slots;
+
+        var left = slots.get(0).getStack();
+
+        if (left.getItem() != Items.PLAYER_HEAD || !slots.get(1).getStack().isEmpty()) return true;
 
         var output = left.copy();
+
+        var bl = profile.isPresent();
         var nbt = output.getOrCreateNbt();
 
-        if (getGameProfile(serverPlayer.server, playerName).isPresent()) {
-            nbt.putString("SkullOwner", playerName);
+        if (bl) {
+            nbt.put("SkullOwner", NbtHelper.writeGameProfile(new NbtCompound(), profile.get()));
 
-            output.setNbt(nbt);
-
-            slots.get(2).setStack(output);
-
-            return true;
+            ((AnvilScreenHandlerAccessor) anvilScreenHandler).aph$getLevelCost().set(1);
         } else {
             nbt.remove("SkullOwner");
-
-            output.setNbt(nbt);
-
-            slots.get(2).setStack(output);
-
-            return false;
         }
-    }
 
-    private static Optional<GameProfile> getGameProfile(MinecraftServer server, String name) {
-        if (StringHelper.isEmpty(name) || name.length() > 16) return Optional.empty();
+        output.setNbt(nbt);
 
-        return server.getUserCache()
-                .findByName(name)
-                .map(GameProfile::getId)
-                .or(() -> {
-                    final var list = Lists.<GameProfile>newArrayList();
+        slots.get(2).setStack(output);
 
-                    var profileLookupCallback = new ProfileLookupCallback() {
-                        @Override
-                        public void onProfileLookupSucceeded(GameProfile profile) {
-                            server.getUserCache().add(profile);
-                            list.add(profile);
-                        }
-
-                        @Override
-                        public void onProfileLookupFailed(GameProfile profile, Exception exception) {}
-                    };
-
-                    lookupProfile(server, Lists.newArrayList(name), profileLookupCallback);
-
-                    if(!list.isEmpty()) {
-                        var id = list.get(0).getId();
-
-                        if(id != null) return Optional.of(id);
-                    }
-
-                    return Optional.empty();
-                }).map(uuid -> new GameProfile(uuid, name));
-    }
-
-    private static void lookupProfile(MinecraftServer server, Collection<String> players, ProfileLookupCallback callback) {
-        var names = players.stream().filter(playerName -> !StringHelper.isEmpty(playerName)).toArray(String[]::new);
-
-        if (server.isOnlineMode()) {
-            server.getGameProfileRepo().findProfilesByNames(names, Agent.MINECRAFT, callback);
-        }  else {
-            for (var name : names) {
-                callback.onProfileLookupSucceeded(new GameProfile(Uuids.getOfflinePlayerUuid(name), name));
-            }
-        }
+        return !bl;
     }
 }
