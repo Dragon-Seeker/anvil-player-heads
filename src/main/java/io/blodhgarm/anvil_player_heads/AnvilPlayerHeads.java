@@ -11,6 +11,7 @@ import net.minecraft.item.Items;
 import net.minecraft.screen.AnvilScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.util.StringHelper;
 import net.minecraft.util.collection.DefaultedList;
 
 import java.util.Map;
@@ -31,6 +32,12 @@ public class AnvilPlayerHeads implements ModInitializer {
         if (left.getItem() != Items.PLAYER_HEAD || !slots.get(1).getStack().isEmpty() || !(player instanceof final ServerPlayerEntity serverPlayer)) return false;
 
         final var playerId = player.getId();
+
+        if(!(StringHelper.isValidPlayerName(playerName)) || playerName.isEmpty()) {
+            ENTITY_ID_TO_LOOKUP_NAME.remove(playerId);
+
+            return false;
+        }
 
         ENTITY_ID_TO_LOOKUP_NAME.put(playerId, playerName);
 
