@@ -10,6 +10,7 @@ import net.minecraft.item.Items;
 import net.minecraft.screen.AnvilScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.util.StringHelper;
 import net.minecraft.util.collection.DefaultedList;
 
 import java.util.Map;
@@ -64,8 +65,6 @@ public class AnvilPlayerHeads implements ModInitializer {
             nbt.putString("SkullOwner", profile.get().getName());
 
             ((AnvilScreenHandlerAccessor) anvilScreenHandler).aph$getLevelCost().set(1);
-        } else {
-            nbt.remove("SkullOwner");
         }
 
         output.setNbt(nbt);
